@@ -148,11 +148,15 @@ export class Kit {
   }
   add(obj) { this.extras.push(obj); return this; }
 
-  build({ shadows = true } = {}) {
+  build({ shadows = true, groundAO = true } = {}) {
     const M = materials();
     const group = new THREE.Group();
     for (const [matKey, geoms] of this.parts) {
       const merged = mergeGeometries(geoms, false);
+      if (groundAO) {
+        const pos = merged.getAttribute('position'), col = merged.getAttribute('color');
+        for (let i = 0; i < pos.count; i++) { const f = 0.8 + 0.2 * Math.min(1, Math.max(0, pos.getY(i)) / 1.1); col.setXYZ(i, col.getX(i) * f, col.getY(i) * f, col.getZ(i) * f); }
+      }
       const mesh = new THREE.Mesh(merged, M[matKey] || M.plaster);
       mesh.castShadow = shadows; mesh.receiveShadow = shadows;
       mesh.name = matKey;

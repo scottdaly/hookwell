@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { W, H, TILE, BUILDINGS } from '../game/defs.js';
 import { idx, inBounds, buildingCells, footprint } from '../game/state.js';
 import { doorTile } from '../game/sim.js';
@@ -7,6 +8,7 @@ import { makeGround, makeRoads, makeChannels, leyMaterial, tileToWorld, worldToT
 import { BUILDERS } from './buildings.js';
 import { candlePine, inkwood, bloom, rockTile, spring, milePost, clump, waymark } from './props.js';
 import { personMesh } from './people.js';
+import { mulberry32 } from '../game/state.js';
 import { InkPass } from './inkpass.js';
 
 const PAPER = new THREE.Color(0xe9e2cf);
@@ -49,9 +51,9 @@ export class View {
   constructor(canvas, state) {
     this.state = state;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.shadowMap.autoUpdate = false;
     this.scene = new THREE.Scene();
     this.scene.background = PAPER.clone();
@@ -63,10 +65,10 @@ export class View {
     // lights
     this.sun = new THREE.DirectionalLight(0xffffff, 2.0);
     this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(2048, 2048);
+    this.sun.shadow.mapSize.set(4096, 4096);
     this.sun.shadow.camera.near = 10; this.sun.shadow.camera.far = 220;
-    this.sun.shadow.bias = -0.0008; this.sun.shadow.normalBias = 0.03;
-    this.sun.shadow.radius = 2;
+    this.sun.shadow.bias = -0.0005; this.sun.shadow.normalBias = 0.04;
+    this.sun.shadow.radius = 5;
     this.scene.add(this.sun); this.scene.add(this.sun.target);
     this.hemi = new THREE.HemisphereLight(0xe9e4d3, 0xc9b48c, 0.9);
     this.scene.add(this.hemi);
@@ -85,6 +87,7 @@ export class View {
     }
     { const [wx, wz] = tileToWorld(3, state.entry.y); const m = waymark(); m.position.set(wx + 0.3, 0, wz - 1.75); m.rotation.y = 0.2; this.static.add(m); }
     this.leyMat = leyMaterial();
+    this.tufts = this.makeTufts(); this.scene.add(this.tufts);
     this.roads = null; this.channels = null;
     this.tileObjs = new Map();     // idx -> {key, obj}
     this.buildingObjs = new Map(); // id -> {key, obj}
@@ -112,6 +115,7 @@ export class View {
     this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
     const s = this.renderer.getDrawingBufferSize(new THREE.Vector2());
     this.ink.setSize(s.x, s.y);
+    this.ink.mat.uniforms.lineW.value = Math.max(1, s.x / 1500);
   }
 
   // ------------------------------------------------------------ camera
@@ -125,7 +129,7 @@ export class View {
     this.camera.lookAt(c.x, 0, c.z);
     // shadow frustum follows the camera target
     const sc = this.sun.shadow.camera;
-    const ext = Math.max(40, c.dist * 1.3);
+    const ext = Math.max(28, c.dist * 0.95);
     sc.left = -ext; sc.right = ext; sc.top = ext; sc.bottom = -ext; sc.updateProjectionMatrix();
     this.sun.target.position.set(c.x, 0, c.z);
   }
@@ -173,6 +177,7 @@ export class View {
     if (this.roads) this.dyn.remove(this.roads);
     this.roads = makeRoads(s); this.dyn.add(this.roads);
     this.rebuildChannels();
+    this.refreshTufts();
     // tiles: trees, bloom
     const seen = new Set();
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
@@ -250,6 +255,39 @@ export class View {
     }
   }
 
+  makeTufts() {
+    // low pale tufts: a squat cone with a lighter tip, one draw call for the whole meadow
+    const g = new THREE.SphereGeometry(0.2, 6, 4); g.scale(1, 0.55, 1); g.translate(0, 0.08, 0);
+    const pos = g.getAttribute('position'); const col = new Float32Array(pos.count * 3);
+    for (let i = 0; i < pos.count; i++) { const f = 0.8 + 0.3 * Math.max(0, pos.getY(i) / 0.2); col[i * 3] = f; col[i * 3 + 1] = f; col[i * 3 + 2] = f * 0.9; }
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    const m = new THREE.MeshLambertMaterial({ color: 0xc2c98a, vertexColors: true });
+    const mesh = new THREE.InstancedMesh(g, m, 2600);
+    mesh.receiveShadow = true; mesh.castShadow = false; mesh.frustumCulled = false;
+    return mesh;
+  }
+  refreshTufts() {
+    const s = this.state, mesh = this.tufts;
+    const rnd = mulberry32(99); const mat = new THREE.Matrix4(); const q = new THREE.Quaternion(); const e = new THREE.Euler();
+    const col = new THREE.Color();
+    let n = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const t = s.tiles[idx(x, y)];
+      const [wx, wz] = tileToWorld(x, y);
+      for (let k = 0; k < 2; k++) {
+        const ox = (rnd() - 0.5) * 3.6, oz = (rnd() - 0.5) * 3.6, ry = rnd() * 6.28, sc = 0.6 + rnd() * 0.8;
+        if (t.road || t.building || t.terrain !== 'grass' || t.bloom || t.tree || rnd() < 0.35) continue;
+        if (n >= mesh.count) break;
+        mat.compose(new THREE.Vector3(wx + ox, 0, wz + oz), q.setFromEuler(e.set(0, ry, 0)), new THREE.Vector3(sc, sc * (0.8 + t.fert * 0.5), sc));
+        mesh.setMatrixAt(n, mat);
+        col.setHSL(0.17 - t.fert * 0.04, 0.34, 0.6 + rnd() * 0.15); mesh.setColorAt(n, col);
+        n++;
+      }
+    }
+    for (let i = n; i < mesh.count; i++) { mat.makeScale(0, 0, 0); mesh.setMatrixAt(i, mat); }
+    mesh.instanceMatrix.needsUpdate = true; if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+  }
+
   rebuildChannels() {
     if (this.channels) this.dyn.remove(this.channels);
     this.channels = makeChannels(this.state, this.leyMat); this.dyn.add(this.channels);
@@ -286,14 +324,16 @@ export class View {
     const warm = new THREE.Color(1.0, 0.96, 0.9), gold = new THREE.Color(1.0, 0.72, 0.45);
     const lowSun = 1 - Math.min(1, dayRaw * 1.6);
     this.sun.color.copy(warm).lerp(gold, lowSun);
-    this.sun.intensity = 2.0 * dayF + 0.0;
+    this.sun.intensity = 2.6 * dayF + 0.0;
     const night = 1 - Math.min(1, dayF * 1.6);
     const skyDay = new THREE.Color(0xe9e4d3), skyNight = new THREE.Color(0x1f2440), skyDusk = new THREE.Color(0xe7c7a0);
     const sky = skyDay.clone().lerp(skyDusk, lowSun * (1 - night)).lerp(skyNight, night);
+    const zenith = new THREE.Color(0xc9d6de).lerp(new THREE.Color(0xd8b48c), lowSun * (1 - night)).lerp(new THREE.Color(0x141a30), night);
     this.scene.background.copy(sky); this.scene.fog.color.copy(sky);
+    this.ink.mat.uniforms.skyBot.value.copy(sky); this.ink.mat.uniforms.skyTop.value.copy(zenith);
     this.hemi.color.copy(sky).lerp(new THREE.Color(0xffffff), 0.2);
     this.hemi.groundColor.set(0xc9b48c).lerp(new THREE.Color(0x151a30), night);
-    this.hemi.intensity = 1.15 - night * 0.7;
+    this.hemi.intensity = 0.95 - night * 0.55;
     this.moon.intensity = night * 0.5;
     this.moon.position.set(-40, 60, 30);
     setGlow(Math.min(1, night * 1.4 + lowSun * 0.3));

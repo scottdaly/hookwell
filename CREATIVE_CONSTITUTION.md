@@ -88,7 +88,10 @@ glyph by every door; the interface is a ledger of seals).
 
 Surfaces are painted, not photographed. The reference is **ink and wash on paper**: a
 depth/normal ink line around every form, washes of colour inside, chalk for joints, paper
-grain over the whole frame. Materials read at gameplay scale (a house is ~120 px tall at
+grain over the whole frame. Since v3 the composite also carries screen-space ambient
+occlusion (things sit *in* the ground), a painted sky gradient, glazed-tile specular sheen,
+and a display-space grade (slight saturation and contrast, warm shadows, soft vignette).
+Grading in linear space crushed the dark foliage to black and was rejected. Materials read at gameplay scale (a house is ~120 px tall at
 default zoom):
 
 | Material | Colour | Treatment |
@@ -186,3 +189,7 @@ and neutral daylight by default. Two project tools were built after real frictio
   between buildings; bloom redesigned with crust and gills; still-house opened so the copper
   reads; hooks enlarged; lodgings given mirrored doors and two pitches; waymark added.
   Pacing measured and rebalanced (stone economy, quills/masters thresholds).
+- v3 — graphics pass after "it looks a little ghetto": SSAO in the ink composite, 4096
+  PCF shadows with a tighter frustum, sky gradient, glazed-tile sheen, stronger sun against a
+  dimmer sky, richer meadow texture with damp/dry patches and flowers, pale tufts, baked
+  contact darkening at the foot of every building, pixel ratio up to 2.

@@ -191,14 +191,24 @@ export function cobbleTex(seed = 6) {
 export function groundTex(seed = 7) {
   const S = 512, c = canvas(S, S), ctx = c.getContext('2d'), rnd = mulberry32(seed);
   ctx.fillStyle = '#c7b48d'; ctx.fillRect(0, 0, S, S);
-  mottle(ctx, S, rnd, { h: 62, s: 26, l0: 52, l1: 66, octaves: [3, 6, 14, 48], weights: [0.45, 0.3, 0.2, 0.12] });
-  // grass tufts as short ink ticks
-  for (let i = 0; i < 2200; i++) {
-    const x = rnd() * S, y = rnd() * S;
-    ctx.strokeStyle = `rgba(70,80,30,${0.12 + rnd() * 0.25})`; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + (rnd() - 0.5) * 3, y - 3 - rnd() * 4); ctx.stroke();
+  mottle(ctx, S, rnd, { h: 62, s: 26, l0: 50, l1: 66, octaves: [3, 6, 14, 48], weights: [0.45, 0.3, 0.2, 0.12] });
+  // darker damp patches and paler worn patches
+  for (let i = 0; i < 26; i++) {
+    const x = rnd() * S, y = rnd() * S, r = 20 + rnd() * 60;
+    const grd = ctx.createRadialGradient(x, y, 0, x, y, r);
+    const dark = rnd() < 0.55;
+    grd.addColorStop(0, dark ? 'rgba(70,80,40,0.28)' : 'rgba(225,210,170,0.3)'); grd.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = grd; ctx.beginPath(); ctx.ellipse(x, y, r, r * (0.5 + rnd() * 0.5), rnd() * 3, 0, 7); ctx.fill();
   }
-  for (let i = 0; i < 300; i++) { ctx.fillStyle = `rgba(240,230,200,${0.2 + rnd() * 0.3})`; ctx.fillRect(rnd() * S, rnd() * S, 1, 1); }
+  // grass as short ink ticks, denser in the damp patches
+  for (let i = 0; i < 6000; i++) {
+    const x = rnd() * S, y = rnd() * S;
+    ctx.strokeStyle = `rgba(60,75,30,${0.12 + rnd() * 0.28})`; ctx.lineWidth = 1 + rnd();
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + (rnd() - 0.5) * 4, y - 3 - rnd() * 6); ctx.stroke();
+  }
+  // a scattering of pale flowers and small stones
+  for (let i = 0; i < 220; i++) { ctx.fillStyle = rnd() < 0.6 ? `rgba(245,235,205,${0.5 + rnd() * 0.4})` : `rgba(230,190,110,${0.5 + rnd() * 0.4})`; ctx.beginPath(); ctx.arc(rnd() * S, rnd() * S, 1 + rnd() * 1.5, 0, 7); ctx.fill(); }
+  for (let i = 0; i < 90; i++) { ctx.fillStyle = `rgba(120,118,110,${0.3 + rnd() * 0.3})`; ctx.beginPath(); ctx.ellipse(rnd() * S, rnd() * S, 1.5 + rnd() * 2, 1 + rnd(), rnd() * 3, 0, 7); ctx.fill(); }
   return tex(c);
 }
 

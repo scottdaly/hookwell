@@ -67,7 +67,7 @@ async function shoot(page, name, spec, outPath) {
 
 const args = process.argv.slice(2);
 const browser = await chromium.launch({ args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] });
-const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
+const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: +(process.env.HW_DSF || 1.5) });
 page.on('pageerror', e => console.log('PAGE ERROR', e.message));
 page.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') console.log('console', m.type(), m.text().slice(0, 300)); });
 try {
