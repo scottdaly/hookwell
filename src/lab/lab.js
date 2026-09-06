@@ -7,6 +7,7 @@ import { STYLES } from './styles/index.js';
 const params = new URLSearchParams(location.search);
 const styleKey = params.get('style') || 'paper';
 const style = STYLES[styleKey];
+if (params.has('nopost')) style.post = null;
 
 // ---- tiny accumulator: geometry + material instance -> merged meshes
 export class LabKit {

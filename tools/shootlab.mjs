@@ -3,7 +3,7 @@ import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
 const BASE = process.env.HW_URL || 'http://localhost:5177';
 mkdirSync('shots/lab', { recursive: true });
-const styles = process.argv.slice(2).length ? process.argv.slice(2) : ['paper', 'gouache', 'glass', 'clay', 'etching'];
+const styles = process.argv.slice(2).length ? process.argv.slice(2) : ['crooked', 'paper', 'gouache', 'glass', 'clay', 'etching'];
 const browser = await chromium.launch({ args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1.5 });
 page.on('pageerror', e => console.log('PAGE ERROR', e.message));

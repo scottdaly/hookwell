@@ -52,15 +52,22 @@ export class InkPass {
           vec2 px = lineW/res;
           float d = lin(vUv);
           float sky = step(far*0.9, d);
-          vec3 n = normalize(texture2D(tNormal, vUv).xyz*2.0-1.0);
+          // view-space normal from depth: pick the smaller difference on each axis so silhouettes stay clean
+          vec3 P = viewPos(vUv);
+          vec3 Pr = viewPos(vUv + vec2(px.x, 0.0)), Pl = viewPos(vUv - vec2(px.x, 0.0)), Pu = viewPos(vUv + vec2(0.0, px.y)), Pd = viewPos(vUv - vec2(0.0, px.y));
+          vec3 ddx = (abs(Pr.z - P.z) < abs(P.z - Pl.z)) ? Pr - P : P - Pl;
+          vec3 ddy = (abs(Pu.z - P.z) < abs(P.z - Pd.z)) ? Pu - P : P - Pd;
+          vec3 n = normalize(cross(ddx, ddy));
           // ---- ink lines
           float de = 0.0, ne = 0.0;
           vec2 offs[4]; offs[0]=vec2(px.x,0.0); offs[1]=vec2(-px.x,0.0); offs[2]=vec2(0.0,px.y); offs[3]=vec2(0.0,-px.y);
           for(int i=0;i<4;i++){
             float dd = lin(vUv+offs[i]);
             de += clamp((abs(dd-d) - d*0.012) / (d*0.01), 0.0, 1.0);
-            vec3 nn = texture2D(tNormal, vUv+offs[i]).xyz*2.0-1.0;
-            ne += smoothstep(0.62, 0.85, 1.0-dot(n,nn));
+            vec3 Q = viewPos(vUv+offs[i]);
+            vec3 Qr = viewPos(vUv+offs[i] + vec2(px.x, 0.0)), Qu = viewPos(vUv+offs[i] + vec2(0.0, px.y));
+            vec3 nn = normalize(cross(Qr - Q, Qu - Q));
+            ne += smoothstep(0.62, 0.85, 1.0-abs(dot(n,nn)));
           }
           float edge = clamp(de*0.85 + ne*0.5, 0.0, 1.0) * (1.0 - sky);
           float fade = 1.0 - smoothstep(70.0, 160.0, d);
@@ -141,11 +148,6 @@ export class InkPass {
     u.proj.value.copy(this.camera.projectionMatrix); u.projInv.value.copy(this.camera.projectionMatrixInverse);
     r.shadowMap.needsUpdate = true;
     r.setRenderTarget(this.rt); r.render(this.scene, this.camera);
-    const bg = this.scene.background; const fog = this.scene.fog;
-    this.scene.background = null; this.scene.fog = null;
-    this.scene.overrideMaterial = this.normalMat;
-    r.setRenderTarget(this.rtN); r.setClearColor(0x8080ff, 1); r.render(this.scene, this.camera);
-    this.scene.overrideMaterial = null; this.scene.background = bg; this.scene.fog = fog;
     r.setRenderTarget(null);
     r.render(this.quadScene, this.quadCam);
   }
