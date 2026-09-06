@@ -193,3 +193,10 @@ and neutral daylight by default. Two project tools were built after real frictio
   PCF shadows with a tighter frustum, sky gradient, glazed-tile sheen, stronger sun against a
   dimmer sky, richer meadow texture with damp/dry patches and flowers, pale tufts, baked
   contact darkening at the foot of every building, pixel ratio up to 2.
+- v4 — charm pass after "still PS1 prototype": the outlines no longer trace every facet of a
+  cone or cylinder (normal-edge threshold raised, line colour warmed and softened); palette
+  harmonised (dusty cobalt, brighter cream plaster, sage meadow, calmer ley); a 1 m ground
+  mesh worn to bare earth along streets and around buildings; every building gets a small
+  position-based wobble so nothing is perfectly straight; a diorama depth of field around the
+  focus distance; drifting cloud shadows; chimney smoke on occupied buildings; smoother
+  pines. What was rejected: pale tuft blobs on the meadow (read as litter), heavy contrast.

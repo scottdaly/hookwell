@@ -34,15 +34,15 @@ export class InkPass {
       uniforms: {
         tColor: { value: this.rt.texture }, tDepth: { value: this.rt.depthTexture }, tNormal: { value: this.rtN.texture },
         tPaper: { value: paperGrainTex() }, res: { value: new THREE.Vector2(size.x, size.y) },
-        near: { value: camera.near }, far: { value: camera.far }, ink: { value: new THREE.Color(0x1b1e33) },
+        near: { value: camera.near }, far: { value: camera.far }, ink: { value: new THREE.Color(0x2a2740) },
         proj: { value: new THREE.Matrix4() }, projInv: { value: new THREE.Matrix4() },
-        kernel: { value: makeKernel(N) }, aoRadius: { value: 1.6 }, aoStrength: { value: 0.75 },
-        strength: { value: 0.85 }, grain: { value: 0.11 }, night: { value: 0 }, lineW: { value: 1 },
+        kernel: { value: makeKernel(N) }, aoRadius: { value: 1.4 }, aoStrength: { value: 0.7 }, dof: { value: 0.8 },
+        strength: { value: 0.72 }, grain: { value: 0.08 }, night: { value: 0 }, lineW: { value: 1 },
         skyTop: { value: new THREE.Color(0xcfd9df) }, skyBot: { value: new THREE.Color(0xeadfc6) },
       },
       vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
       fragmentShader: `
-        uniform sampler2D tColor, tDepth, tNormal, tPaper; uniform vec2 res; uniform float near, far, strength, grain, night, aoRadius, aoStrength, lineW;
+        uniform sampler2D tColor, tDepth, tNormal, tPaper; uniform vec2 res; uniform float near, far, strength, grain, night, aoRadius, aoStrength, lineW, dof;
         uniform vec3 ink, skyTop, skyBot; uniform mat4 proj, projInv; uniform vec3 kernel[N_SAMPLES];
         varying vec2 vUv;
         float lin(vec2 uv){ float z = texture2D(tDepth, uv).x; float n = z*2.0-1.0; return (2.0*near*far)/(far+near-n*(far-near)); }
@@ -60,9 +60,9 @@ export class InkPass {
             float dd = lin(vUv+offs[i]);
             de += clamp((abs(dd-d) - d*0.012) / (d*0.01), 0.0, 1.0);
             vec3 nn = texture2D(tNormal, vUv+offs[i]).xyz*2.0-1.0;
-            ne += smoothstep(0.30, 0.55, 1.0-dot(n,nn));
+            ne += smoothstep(0.62, 0.85, 1.0-dot(n,nn));
           }
-          float edge = clamp(de*0.9 + ne*0.55, 0.0, 1.0) * (1.0 - sky);
+          float edge = clamp(de*0.85 + ne*0.5, 0.0, 1.0) * (1.0 - sky);
           float fade = 1.0 - smoothstep(70.0, 160.0, d);
           // ---- ambient occlusion
           float ao = 1.0;
@@ -87,11 +87,25 @@ export class InkPass {
             }
             ao = 1.0 - aoStrength * occ / float(N_SAMPLES);
           }
-          // ---- compose
+          // ---- compose, with a diorama depth of field away from the focus distance
+          float focus = lin(vec2(0.5, 0.55));
+          float coc = clamp(abs(d - focus) / (focus * 0.9) - 0.12, 0.0, 1.0) * dof * (1.0 - sky);
           vec3 col = texture2D(tColor, vUv).rgb;
+          if (coc > 0.02) {
+            float r = coc * 7.0 * lineW;
+            vec3 acc = col; float wsum = 1.0;
+            for (int i = 0; i < 8; i++) {
+              float a = float(i) * 0.7854 + ign(gl_FragCoord.xy) * 0.8;
+              vec2 o = vec2(cos(a), sin(a)) * r / res;
+              acc += texture2D(tColor, vUv + o).rgb; wsum += 1.0;
+              acc += texture2D(tColor, vUv + o * 0.5).rgb * 0.7; wsum += 0.7;
+            }
+            col = acc / wsum;
+          }
+          float edgeK = 1.0 - coc * 0.8;
           col *= mix(1.0, ao, 1.0 - night*0.4);
-          vec3 inkCol = mix(ink, col*0.35, 0.25);
-          col = mix(col, inkCol, edge*strength*fade);
+          vec3 inkCol = mix(ink, col*0.45, 0.45);
+          col = mix(col, inkCol, edge*strength*fade*edgeK);
           // sky where there is no geometry
           vec3 skyCol = mix(skyBot, skyTop, smoothstep(0.30, 1.0, vUv.y));
           col = mix(col, skyCol, sky);
@@ -102,9 +116,10 @@ export class InkPass {
           // wash grade in display space: a touch of saturation and contrast, warm shadows, vignette
           vec3 c = gl_FragColor.rgb;
           float luma = dot(c, vec3(0.299, 0.587, 0.114));
-          c = mix(vec3(luma), c, 1.1);
-          c = (c - 0.5) * 1.05 + 0.5;
-          c += (1.0 - luma) * vec3(0.02, 0.008, -0.01) * (1.0 - night);
+          c = mix(vec3(luma), c, 1.06);
+          c = (c - 0.5) * 1.07 + 0.5;
+          c = c * 0.97 + vec3(0.02, 0.018, 0.028) * (1.0 - night*0.5);   // lifted, slightly cool blacks
+          c += (1.0 - luma) * vec3(0.02, 0.01, -0.005) * (1.0 - night);
           float v = length((vUv - 0.5) * vec2(1.0, res.y/res.x) * 1.4);
           c *= 1.0 - 0.14 * smoothstep(0.5, 1.1, v);
           gl_FragColor.rgb = clamp(c, 0.0, 1.0);

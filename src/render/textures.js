@@ -71,7 +71,7 @@ function hslToRgb(h, s, l) {
 export function plasterTex(seed = 1) {
   const S = 256, c = canvas(S, S), ctx = c.getContext('2d'), rnd = mulberry32(seed);
   ctx.fillStyle = '#f1e6cc'; ctx.fillRect(0, 0, S, S);
-  mottle(ctx, S, rnd, { h: 40, s: 38, l0: 78, l1: 93, octaves: [3, 6, 12, 40], weights: [0.5, 0.3, 0.2, 0.15] });
+  mottle(ctx, S, rnd, { h: 40, s: 34, l0: 84, l1: 95, octaves: [3, 6, 12, 40], weights: [0.5, 0.3, 0.2, 0.15] });
   // limewash drips: faint vertical streaks
   for (let i = 0; i < 26; i++) {
     const x = rnd() * S, w = 1 + rnd() * 3, l = 20 + rnd() * 120;
@@ -110,15 +110,15 @@ export function ashlarTex(seed = 2) {
 
 export function roofTileTex(seed = 3, hue = 218) {
   const S = 256, c = canvas(S, S), ctx = c.getContext('2d'), rnd = mulberry32(seed);
-  ctx.fillStyle = hsl(hue, 45, 18); ctx.fillRect(0, 0, S, S);
+  ctx.fillStyle = hsl(hue, 34, 22); ctx.fillRect(0, 0, S, S);
   const rows = 8, tw = 32, th = S / rows;
   for (let r = 0; r < rows; r++) {
     const off = (r % 2) * tw / 2;
     for (let i = -1; i <= S / tw; i++) {
       const x = i * tw + off, y = r * th;
-      const chipped = rnd() < 0.025;
-      const l = chipped ? 58 : 30 + rnd() * 14, s = chipped ? 18 : 48 + rnd() * 12;
-      const h = hue + (rnd() - 0.5) * 18;
+      const chipped = rnd() < 0.018;
+      const l = chipped ? 56 : 34 + rnd() * 10, s = chipped ? 16 : 36 + rnd() * 10;
+      const h = hue + (rnd() - 0.5) * 12;
       ctx.fillStyle = hsl(h, s, l);
       // tile with rounded lower edge
       ctx.beginPath();
@@ -128,10 +128,11 @@ export function roofTileTex(seed = 3, hue = 218) {
       ctx.quadraticCurveTo(x + tw / 2, y + th + 2, x + 1, y + th - 6);
       ctx.closePath(); ctx.fill();
       // glaze highlight
-      ctx.fillStyle = `rgba(200,225,240,${0.12 + rnd() * 0.12})`;
-      ctx.fillRect(x + 3, y + 2, tw - 8, 3);
+      const hl = ctx.createLinearGradient(0, y, 0, y + th);
+      hl.addColorStop(0, `rgba(215,230,245,${0.16 + rnd() * 0.1})`); hl.addColorStop(0.45, 'rgba(215,230,245,0)');
+      ctx.fillStyle = hl; ctx.fillRect(x + 2, y + 1, tw - 4, th - 4);
       // shadow under the course above
-      ctx.fillStyle = 'rgba(0,0,10,0.28)';
+      ctx.fillStyle = 'rgba(0,0,10,0.2)';
       ctx.fillRect(x + 1, y, tw - 2, 2);
     }
   }
@@ -171,17 +172,17 @@ export function chevronTex(seed = 5) {
 export function cobbleTex(seed = 6) {
   const S = 256, c = canvas(S, S), ctx = c.getContext('2d'), rnd = mulberry32(seed);
   ctx.fillStyle = '#b9a884'; ctx.fillRect(0, 0, S, S);
-  mottle(ctx, S, rnd, { h: 38, s: 28, l0: 58, l1: 70, octaves: [4, 16], weights: [0.6, 0.4] });
-  const cell = 18;
+  mottle(ctx, S, rnd, { h: 38, s: 22, l0: 62, l1: 72, octaves: [4, 16], weights: [0.6, 0.4] });
+  const cell = 13;
   for (let y = -1; y <= S / cell; y++) for (let x = -1; x <= S / cell; x++) {
     const cx = x * cell + cell / 2 + (y % 2) * cell / 2 + (rnd() - 0.5) * 4;
     const cy = y * cell + cell / 2 + (rnd() - 0.5) * 4;
     const r = cell * 0.44 + rnd() * 2;
-    ctx.fillStyle = hsl(36 + rnd() * 12, 12 + rnd() * 10, 48 + rnd() * 16);
-    ctx.beginPath(); ctx.ellipse(cx, cy, r, r * 0.8, rnd() * 0.5, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = 'rgba(255,245,220,0.25)';
-    ctx.beginPath(); ctx.ellipse(cx - 2, cy - 3, r * 0.5, r * 0.3, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = 'rgba(40,30,20,0.18)';
+    ctx.fillStyle = hsl(36 + rnd() * 14, 10 + rnd() * 10, 56 + rnd() * 14);
+    ctx.beginPath(); ctx.ellipse(cx, cy, r, r * 0.82, rnd() * 0.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,245,220,0.18)';
+    ctx.beginPath(); ctx.ellipse(cx - 1, cy - 2, r * 0.5, r * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(40,30,20,0.1)';
     ctx.beginPath(); ctx.ellipse(cx, cy + r * 0.5, r * 0.8, r * 0.3, 0, 0, Math.PI * 2); ctx.fill();
   }
   // duplicate edges for seamlessness is approximated by the wrap-around loop above
@@ -190,20 +191,20 @@ export function cobbleTex(seed = 6) {
 
 export function groundTex(seed = 7) {
   const S = 512, c = canvas(S, S), ctx = c.getContext('2d'), rnd = mulberry32(seed);
-  ctx.fillStyle = '#c7b48d'; ctx.fillRect(0, 0, S, S);
-  mottle(ctx, S, rnd, { h: 62, s: 26, l0: 50, l1: 66, octaves: [3, 6, 14, 48], weights: [0.45, 0.3, 0.2, 0.12] });
+  ctx.fillStyle = '#d2cfb0'; ctx.fillRect(0, 0, S, S);
+  mottle(ctx, S, rnd, { h: 75, s: 14, l0: 70, l1: 84, octaves: [3, 6, 14, 48], weights: [0.45, 0.3, 0.2, 0.12] });
   // darker damp patches and paler worn patches
   for (let i = 0; i < 26; i++) {
     const x = rnd() * S, y = rnd() * S, r = 20 + rnd() * 60;
     const grd = ctx.createRadialGradient(x, y, 0, x, y, r);
     const dark = rnd() < 0.55;
-    grd.addColorStop(0, dark ? 'rgba(70,80,40,0.28)' : 'rgba(225,210,170,0.3)'); grd.addColorStop(1, 'rgba(0,0,0,0)');
+    grd.addColorStop(0, dark ? 'rgba(90,110,60,0.22)' : 'rgba(235,225,190,0.26)'); grd.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = grd; ctx.beginPath(); ctx.ellipse(x, y, r, r * (0.5 + rnd() * 0.5), rnd() * 3, 0, 7); ctx.fill();
   }
   // grass as short ink ticks, denser in the damp patches
-  for (let i = 0; i < 6000; i++) {
+  for (let i = 0; i < 2600; i++) {
     const x = rnd() * S, y = rnd() * S;
-    ctx.strokeStyle = `rgba(60,75,30,${0.12 + rnd() * 0.28})`; ctx.lineWidth = 1 + rnd();
+    ctx.strokeStyle = `rgba(70,90,40,${0.08 + rnd() * 0.16})`; ctx.lineWidth = 1 + rnd();
     ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + (rnd() - 0.5) * 4, y - 3 - rnd() * 6); ctx.stroke();
   }
   // a scattering of pale flowers and small stones

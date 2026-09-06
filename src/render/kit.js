@@ -148,11 +148,24 @@ export class Kit {
   }
   add(obj) { this.extras.push(obj); return this; }
 
-  build({ shadows = true, groundAO = true } = {}) {
+  build({ shadows = true, groundAO = true, wobble = 0.045 } = {}) {
     const M = materials();
     const group = new THREE.Group();
     for (const [matKey, geoms] of this.parts) {
       const merged = mergeGeometries(geoms, false);
+      if (wobble > 0) {
+        // position-based displacement so shared edges stay closed; grows with height so roofs lean a little
+        const pos = merged.getAttribute('position');
+        for (let i = 0; i < pos.count; i++) {
+          const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+          const k = wobble * (0.5 + Math.min(1.5, y * 0.18));
+          pos.setXYZ(i,
+            x + k * Math.sin(y * 1.7 + z * 2.3 + 0.4) * Math.cos(x * 1.1),
+            y + k * 0.5 * Math.sin(x * 2.1 + z * 1.3),
+            z + k * Math.sin(x * 1.9 + y * 1.4 + 1.7) * Math.cos(z * 1.2));
+        }
+        pos.needsUpdate = true;
+      }
       if (groundAO) {
         const pos = merged.getAttribute('position'), col = merged.getAttribute('color');
         for (let i = 0; i < pos.count; i++) { const f = 0.8 + 0.2 * Math.min(1, Math.max(0, pos.getY(i)) / 1.1); col.setXYZ(i, col.getX(i) * f, col.getY(i) * f, col.getZ(i) * f); }

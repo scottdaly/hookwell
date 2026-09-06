@@ -4,7 +4,7 @@ import { W, H, TILE, BUILDINGS } from '../game/defs.js';
 import { idx, inBounds, buildingCells, footprint } from '../game/state.js';
 import { doorTile } from '../game/sim.js';
 import { materials, setGlow } from './materials.js';
-import { makeGround, makeRoads, makeChannels, leyMaterial, tileToWorld, worldToTile } from './terrain.js';
+import { makeGround, makeRoads, makeChannels, leyMaterial, tileToWorld, worldToTile, colorGround } from './terrain.js';
 import { BUILDERS } from './buildings.js';
 import { candlePine, inkwood, bloom, rockTile, spring, milePost, clump, waymark } from './props.js';
 import { personMesh } from './people.js';
@@ -77,7 +77,7 @@ export class View {
     this.lampLights = [];
 
     // static world
-    this.scene.add(makeGround(state));
+    this.ground = makeGround(state); this.scene.add(this.ground);
     this.static = new THREE.Group(); this.scene.add(this.static);
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
       const t = state.tiles[idx(x, y)];
@@ -87,11 +87,25 @@ export class View {
     }
     { const [wx, wz] = tileToWorld(3, state.entry.y); const m = waymark(); m.position.set(wx + 0.3, 0, wz - 1.75); m.rotation.y = 0.2; this.static.add(m); }
     this.leyMat = leyMaterial();
+    // drifting cloud shadows: a big soft blotch texture on a transparent plane just above the ground
+    { const c = document.createElement('canvas'); c.width = c.height = 512; const ctx = c.getContext('2d');
+      const rnd = mulberry32(31);
+      for (let i = 0; i < 40; i++) { const x = rnd() * 512, y = rnd() * 512, r = 40 + rnd() * 90; const g = ctx.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, 'rgba(30,35,60,0.55)'); g.addColorStop(0.6, 'rgba(30,35,60,0.25)'); g.addColorStop(1, 'rgba(30,35,60,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x, y, r * 1.4, r * 0.8, rnd() * 3, 0, 7); ctx.fill(); }
+      const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      this.cloudMat = new THREE.MeshBasicMaterial({ map: t, transparent: true, opacity: 0.2, depthWrite: false });
+      const pl = new THREE.Mesh(new THREE.PlaneGeometry(W * TILE * 1.2, H * TILE * 1.2), this.cloudMat);
+      pl.rotation.x = -Math.PI / 2; pl.position.y = 0.06; pl.renderOrder = 2;
+      t.repeat.set(0.9, 0.9);
+      this.clouds = pl; this.scene.add(pl); }
     this.tufts = this.makeTufts(); this.scene.add(this.tufts);
     this.roads = null; this.channels = null;
     this.tileObjs = new Map();     // idx -> {key, obj}
     this.buildingObjs = new Map(); // id -> {key, obj}
     this.peopleObjs = new Map();
+    // chimney smoke: a pool of soft puffs shared by every occupied building
+    this.smoke = new THREE.InstancedMesh(new THREE.SphereGeometry(0.28, 7, 5), new THREE.MeshLambertMaterial({ color: 0xe9e6ea, transparent: true, opacity: 0.55, depthWrite: false }), 240);
+    this.smoke.castShadow = false; this.smoke.frustumCulled = false; this.smoke.count = 0;
+    this.scene.add(this.smoke);
     this.dyn = new THREE.Group(); this.scene.add(this.dyn);
     this.peopleGroup = new THREE.Group(); this.scene.add(this.peopleGroup);
     this.lastVersion = -1;
@@ -178,6 +192,7 @@ export class View {
     this.roads = makeRoads(s); this.dyn.add(this.roads);
     this.rebuildChannels();
     this.refreshTufts();
+    colorGround(this.ground, s);
     // tiles: trees, bloom
     const seen = new Set();
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
@@ -262,7 +277,7 @@ export class View {
     for (let i = 0; i < pos.count; i++) { const f = 0.8 + 0.3 * Math.max(0, pos.getY(i) / 0.2); col[i * 3] = f; col[i * 3 + 1] = f; col[i * 3 + 2] = f * 0.9; }
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
     const m = new THREE.MeshLambertMaterial({ color: 0xc2c98a, vertexColors: true });
-    const mesh = new THREE.InstancedMesh(g, m, 2600);
+    const mesh = new THREE.InstancedMesh(g, m, 1);
     mesh.receiveShadow = true; mesh.castShadow = false; mesh.frustumCulled = false;
     return mesh;
   }
@@ -293,6 +308,29 @@ export class View {
     this.channels = makeChannels(this.state, this.leyMat); this.dyn.add(this.channels);
   }
 
+  updateSmoke() {
+    const s = this.state, m = this.smoke;
+    const CH = { lodging: [0.5, 8.3, -0.8], jhouse: [-1.0, 8.4, -0.6], tower: [-1.0, 13.8, -1.0], bakery: [-1.15, 4.7, -0.5], tavern: [-1.2, 9.1, -0.5], scriptorium: [-2.9, 6.8, -0.6], chancery: [-2.6, 8.0, -1.2], woodcutter: [-1.3, 4.3, -0.6], alembic: [0, 6.6, 0], observatory: [2.8, 6.0, 0.8] };
+    const mat = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), sc = new THREE.Vector3();
+    let n = 0;
+    for (const b of s.buildings.values()) {
+      const c = CH[b.type]; if (!c) continue;
+      const occupied = (b.residents.length + b.workers.length) > 0 || b.type === 'alembic' && b.supplied;
+      if (!occupied || !b.active && !BUILDINGS[b.type].housing) continue;
+      const o = this.buildingObjs.get(b.id); if (!o) continue;
+      const base = v.set(c[0], c[1], c[2]).applyEuler(o.obj.rotation).add(o.obj.position);
+      for (let k = 0; k < 4 && n < 240; k++) {
+        const f = ((this.clock * 0.22 + k * 0.25 + b.seed) % 1);
+        const rise = f * 3.2, drift = f * f * 1.2;
+        const size = 0.5 + f * 1.6;
+        sc.set(size, size * 0.8, size);
+        mat.compose(new THREE.Vector3(base.x + drift + Math.sin(f * 9 + b.seed * 6) * 0.25, base.y + rise, base.z + Math.cos(f * 7 + b.seed) * 0.25), q, sc.multiplyScalar(f > 0.85 ? (1 - f) / 0.15 : 1));
+        m.setMatrixAt(n++, mat);
+      }
+    }
+    m.count = n; m.instanceMatrix.needsUpdate = true;
+  }
+
   syncPeople() {
     const s = this.state;
     const seen = new Set();
@@ -321,19 +359,19 @@ export class View {
     const el = Math.max(0.05, Math.sin(ang)) * 1.1 + 0.15;
     const az = -0.9 + (t - 0.5) * 1.8;
     this.sun.position.set(Math.cos(az) * 70, el * 130, Math.sin(az) * 70).add(this.sun.target.position);
-    const warm = new THREE.Color(1.0, 0.96, 0.9), gold = new THREE.Color(1.0, 0.72, 0.45);
+    const warm = new THREE.Color(1.0, 0.95, 0.86), gold = new THREE.Color(1.0, 0.74, 0.48);
     const lowSun = 1 - Math.min(1, dayRaw * 1.6);
     this.sun.color.copy(warm).lerp(gold, lowSun);
-    this.sun.intensity = 2.6 * dayF + 0.0;
+    this.sun.intensity = 2.7 * dayF + 0.0;
     const night = 1 - Math.min(1, dayF * 1.6);
-    const skyDay = new THREE.Color(0xe9e4d3), skyNight = new THREE.Color(0x1f2440), skyDusk = new THREE.Color(0xe7c7a0);
+    const skyDay = new THREE.Color(0xe6e2d4), skyNight = new THREE.Color(0x1f2440), skyDusk = new THREE.Color(0xe7c7a0);
     const sky = skyDay.clone().lerp(skyDusk, lowSun * (1 - night)).lerp(skyNight, night);
-    const zenith = new THREE.Color(0xc9d6de).lerp(new THREE.Color(0xd8b48c), lowSun * (1 - night)).lerp(new THREE.Color(0x141a30), night);
+    const zenith = new THREE.Color(0xbfd0de).lerp(new THREE.Color(0xd8b48c), lowSun * (1 - night)).lerp(new THREE.Color(0x141a30), night);
     this.scene.background.copy(sky); this.scene.fog.color.copy(sky);
     this.ink.mat.uniforms.skyBot.value.copy(sky); this.ink.mat.uniforms.skyTop.value.copy(zenith);
-    this.hemi.color.copy(sky).lerp(new THREE.Color(0xffffff), 0.2);
-    this.hemi.groundColor.set(0xc9b48c).lerp(new THREE.Color(0x151a30), night);
-    this.hemi.intensity = 0.95 - night * 0.55;
+    this.hemi.color.set(0xcfdcec).lerp(sky, 0.4);
+    this.hemi.groundColor.set(0xd6c39c).lerp(new THREE.Color(0x151a30), night);
+    this.hemi.intensity = 0.9 - night * 0.5;
     this.moon.intensity = night * 0.5;
     this.moon.position.set(-40, 60, 30);
     setGlow(Math.min(1, night * 1.4 + lowSun * 0.3));
@@ -346,10 +384,12 @@ export class View {
   render(dt) {
     this.clock += dt;
     this.leyMat.uniforms.time.value = this.clock;
+    if (this.cloudMat) { this.cloudMat.map.offset.set(this.clock * 0.004, this.clock * 0.0025); this.cloudMat.opacity = 0.2 * (1 - this.ink.mat.uniforms.night.value); }
     this.updateCamera();
     this.updateLighting();
     this.sync();
     this.syncPeople();
+    this.updateSmoke();
     this.ink.render();
   }
 }

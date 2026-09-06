@@ -18,7 +18,7 @@ export function candlePine(seed) {
     const y = y0 + f * (y1 - y0);
     const r = (0.78 - f * 0.45) * (0.9 + rnd() * 0.25);
     const th = 1.35 - f * 0.4;
-    k.cone({ r, h: th, y: y - th * 0.15, x: lean * y * 0.4, seg: 7, mat: 'pine', tint, rimTint: rim, rz: lean * 0.3 });
+    k.cone({ r, h: th, y: y - th * 0.15, x: lean * y * 0.4, seg: 10, mat: 'pine', tint, rimTint: rim, rz: lean * 0.3 });
   }
   // the guttering tip: three small cones bending over into a hook
   const ty = y1 + 0.7, tx = lean * ty * 0.4;

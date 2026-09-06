@@ -8,31 +8,48 @@ import { groundTex, cobbleTex } from './textures.js';
 export const tileToWorld = (tx, ty) => [(tx - W / 2 + 0.5) * TILE, (ty - H / 2 + 0.5) * TILE];
 export const worldToTile = (x, z) => [Math.floor(x / TILE + W / 2), Math.floor(z / TILE + H / 2)];
 
-// Ground: one plane with vertex colours from the tile noise and a painted grass/earth map.
+// Ground: one fine plane (1 m cells) with vertex colours: sage meadow drifting to dry straw,
+// worn to bare earth along the streets and around buildings. Recoloured when the town changes.
 export function makeGround(s) {
-  const g = new THREE.PlaneGeometry(W * TILE, H * TILE, W, H);
+  const g = new THREE.PlaneGeometry(W * TILE, H * TILE, W * 4, H * 4);
   g.rotateX(-Math.PI / 2);
-  const pos = g.getAttribute('position');
-  const col = new Float32Array(pos.count * 3);
-  const c = new THREE.Color();
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i), z = pos.getZ(i);
-    const [tx, ty] = worldToTile(x + 0.01, z + 0.01);
-    const t = s.tiles[idx(Math.min(W - 1, Math.max(0, tx)), Math.min(H - 1, Math.max(0, ty)))];
-    // olive grass toward dry tan in broad drifts, with a little per-tile speckle
-    const n = 0.5 + 0.28 * Math.sin(x * 0.045 + Math.sin(z * 0.07) * 1.4) + 0.22 * Math.sin(z * 0.06 + Math.cos(x * 0.05) * 1.8);
-    const f = Math.max(0, Math.min(1, n * 0.8 + t.fert * 0.2));
-    c.setHSL(0.16 - f * 0.05, 0.3 - f * 0.06, 0.58 + f * 0.1);
-    if (t.terrain === 'rock') c.setHSL(0.6, 0.06, 0.62);
-    col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
-  }
-  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(g.getAttribute('position').count * 3), 3));
   const uv = g.getAttribute('uv');
-  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * W / 3, uv.getY(i) * H / 3);
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * W / 2.5, uv.getY(i) * H / 2.5);
   const m = new THREE.MeshLambertMaterial({ map: groundTex(), vertexColors: true });
   const mesh = new THREE.Mesh(g, m);
   mesh.receiveShadow = true;
+  colorGround(mesh, s);
   return mesh;
+}
+export function colorGround(mesh, s) {
+  const g = mesh.geometry, pos = g.getAttribute('position'), col = g.getAttribute('color');
+  const c = new THREE.Color(), earth = new THREE.Color(0xc4ad84), rockC = new THREE.Color(0xa9aaa6);
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), z = pos.getZ(i);
+    const [tx, ty] = worldToTile(x + 0.001, z + 0.001);
+    const cx = Math.min(W - 1, Math.max(0, tx)), cy = Math.min(H - 1, Math.max(0, ty));
+    const t = s.tiles[idx(cx, cy)];
+    const n = 0.5 + 0.28 * Math.sin(x * 0.045 + Math.sin(z * 0.07) * 1.4) + 0.22 * Math.sin(z * 0.06 + Math.cos(x * 0.05) * 1.8);
+    const f = Math.max(0, Math.min(1, n * 0.8 + t.fert * 0.2));
+    c.setHSL(0.235 - f * 0.06, 0.36 - f * 0.08, 0.52 + f * 0.12);
+    // wear: distance to the nearest street or building tile in the 3x3 neighbourhood
+    let wear = 0;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const nx = cx + dx, ny = cy + dy;
+      if (!inBounds(nx, ny)) continue;
+      const u = s.tiles[idx(nx, ny)];
+      if (!u.road && !u.building) continue;
+      const [wx, wz] = tileToWorld(nx, ny);
+      const ddx = Math.max(0, Math.abs(x - wx) - TILE / 2), ddz = Math.max(0, Math.abs(z - wz) - TILE / 2);
+      const d = Math.hypot(ddx, ddz);
+      wear = Math.max(wear, 1 - Math.min(1, d / (u.road ? 1.3 : 0.9)));
+    }
+    if (t.terrain === 'rock') c.copy(rockC);
+    c.lerp(earth, wear * wear * 0.85);
+    col.setXYZ(i, c.r, c.g, c.b);
+  }
+  col.needsUpdate = true;
 }
 
 let cobbleMat = null, curbMat = null;
@@ -57,7 +74,7 @@ export function makeRoads(s) {
     const uv = g.getAttribute('uv');
     for (let i = 0; i < uv.count; i++) uv.setXY(i, (uv.getX(i) * w / TILE) * 1.5 + x * 0.37, (uv.getY(i) * d / TILE) * 1.5 + y * 0.53);
     const col = new Float32Array(uv.count * 3);
-    c.setHSL(0.09, 0.1, 0.7 + (t.fert - 0.5) * 0.1);
+    c.setHSL(0.08, 0.12, 0.72 + (t.fert - 0.5) * 0.08);
     for (let i = 0; i < uv.count; i++) { col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; }
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
     quads.push(g);
@@ -112,9 +129,9 @@ export function leyMaterial() {
         float band = sin(vUv.x*6.2832 - time*3.0 + sin(vUv.y*9.0)*0.6)*0.5+0.5;
         band = smoothstep(0.55, 0.95, band);
         float edge = smoothstep(0.0, 0.25, vUv.y) * smoothstep(1.0, 0.75, vUv.y);
-        vec3 deep = vec3(0.07, 0.24, 0.50);
-        vec3 body = vec3(0.13, 0.46, 0.66);
-        vec3 foam = vec3(0.55, 0.85, 0.88);
+        vec3 deep = vec3(0.10, 0.28, 0.46);
+        vec3 body = vec3(0.19, 0.50, 0.62);
+        vec3 foam = vec3(0.62, 0.86, 0.86);
         vec3 col = mix(deep, body, edge);
         col = mix(col, foam, band*0.6*edge + (1.0-edge)*0.2*band);
         col += glow * vec3(0.15, 0.35, 0.45);

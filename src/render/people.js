@@ -45,7 +45,7 @@ export function person(rank, seed) {
       k.box({ x: 0.4 * S, y: 0.6 * S, z: 0, w: 0.16 * S, h: 0.3 * S, d: 0.34 * S, mat: 'timber' });
     }
   }
-  const g = k.build({ shadows: true, groundAO: false });
+  const g = k.build({ shadows: true, groundAO: false, wobble: 0 });
   // beards and lanterns flipped make masters look like they are facing +z already; nothing to do.
   return g;
 }
