@@ -1,0 +1,23 @@
+{
+  "name": "hookwell",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Hookwell - a chartered city of wizards. A city builder where magic is municipal plumbing.",
+  "scripts": {
+    "dev": "vite --port 5177 --strictPort",
+    "build": "vite build",
+    "preview": "vite preview --port 5178",
+    "shoot": "node tools/shoot.mjs",
+    "desktop": "vite build && electron electron/main.cjs",
+    "desktop:dev": "HW_DEV=1 electron electron/main.cjs"
+  },
+  "dependencies": {
+    "three": "^0.169.0",
+    "vite": "^5.4.21"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "playwright": "^1.55.0"
+  }
+}
